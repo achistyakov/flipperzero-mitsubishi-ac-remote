@@ -1,5 +1,8 @@
 #include "../ac_remote_app_i.h"
 
+#include <locale/locale.h>
+#include <math.h>
+
 typedef enum {
     button_power,
     button_mode,
@@ -32,6 +35,24 @@ const Icon* vane[7][2] = {
     [HvacMitsubishiVaneAutoMove] = {&I_vane_auto_move_19x20, &I_vane_auto_move_hover_19x20}};
 
 char buffer[4] = {0};
+
+static bool ac_remote_locale_is_imperial(void) {
+    return locale_get_measurement_unit() == LocaleMeasurementUnitsImperial;
+}
+
+// The HVAC protocol always carries degrees Celsius, so only the displayed
+// value is converted when the system is set to imperial units.
+static void ac_remote_format_temperature(uint32_t temperature) {
+    if(ac_remote_locale_is_imperial()) {
+        snprintf(
+            buffer,
+            sizeof(buffer),
+            "%d",
+            (int)roundf(locale_celsius_to_fahrenheit(temperature)));
+    } else {
+        snprintf(buffer, sizeof(buffer), "%ld", temperature);
+    }
+}
 
 bool ac_remote_load_settings(ACRemoteAppSettings* app_state) {
     Storage* storage = furi_record_open(RECORD_STORAGE);
@@ -131,7 +152,11 @@ void ac_remote_scene_mitsubishi_on_enter(void* context) {
         ac_remote_scene_universal_common_item_callback,
         context);
     ac_remote_panel_add_icon(ac_remote_panel, 39, 39, &I_mode_text_20x5);
-    ac_remote_panel_add_icon(ac_remote_panel, 0, 63, &I_frame_30x39);
+    ac_remote_panel_add_icon(
+        ac_remote_panel,
+        0,
+        63,
+        ac_remote_locale_is_imperial() ? &I_frame_f_30x39 : &I_frame_30x39);
     ac_remote_panel_add_item(
         ac_remote_panel,
         button_temp_up,
@@ -181,7 +206,7 @@ void ac_remote_scene_mitsubishi_on_enter(void* context) {
 
     ac_remote_panel_add_label(ac_remote_panel, 0, 6, 11, FontPrimary, "AC remote");
 
-    snprintf(buffer, sizeof(buffer), "%ld", ac_remote->app_state.temperature);
+    ac_remote_format_temperature(ac_remote->app_state.temperature);
     ac_remote_panel_add_label(ac_remote_panel, label_temperature, 4, 86, FontKeyboard, buffer);
 
     view_set_orientation(view_stack_get_view(ac_remote->view_stack), ViewOrientationVertical);
@@ -253,7 +278,7 @@ bool ac_remote_scene_mitsubishi_on_event(void* context, SceneManagerEvent event)
                     ac_remote->app_state.temperature++;
                     hvac_mitsubishi_set_temperature(
                         ac_remote->hvac_mitsubishi_data, ac_remote->app_state.temperature);
-                    snprintf(buffer, sizeof(buffer), "%ld", ac_remote->app_state.temperature);
+                    ac_remote_format_temperature(ac_remote->app_state.temperature);
                     ac_remote_panel_label_set_string(ac_remote_panel, label_temperature, buffer);
                 }
                 break;
@@ -262,7 +287,7 @@ bool ac_remote_scene_mitsubishi_on_event(void* context, SceneManagerEvent event)
                     ac_remote->app_state.temperature--;
                     hvac_mitsubishi_set_temperature(
                         ac_remote->hvac_mitsubishi_data, ac_remote->app_state.temperature);
-                    snprintf(buffer, sizeof(buffer), "%ld", ac_remote->app_state.temperature);
+                    ac_remote_format_temperature(ac_remote->app_state.temperature);
                     ac_remote_panel_label_set_string(ac_remote_panel, label_temperature, buffer);
                 }
                 break;
